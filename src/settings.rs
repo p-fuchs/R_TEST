@@ -11,10 +11,18 @@ pub struct Options {
 impl Options {
     fn default() -> Options {
         Options {
-            test_root_directory: ".".to_string(),
+            test_root_directory: "testy/".to_string(),
             program_executable_path: ".".to_string(),
             is_valgrind_active: true
         }
+    }
+
+    pub fn get_test_path(&self) -> &str {
+        &self.test_root_directory
+    }
+
+    pub fn get_program_path(&self) -> &str {
+        &self.program_executable_path
     }
 
     pub fn new() -> Options {
