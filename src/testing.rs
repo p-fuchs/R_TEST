@@ -21,6 +21,23 @@ enum TestFail {
     InnerProblem(String)
 }
 
+impl TestFail {
+    fn get_problem(&self) -> &str {
+        match self {
+            TestFail::Valgrind(err) => &err,
+            TestFail::InnerProblem(err) => &err,
+            TestFail::Diff(diff_error) => {
+                match diff_error {
+                    DiffResult::Difference(err) => &err,
+                    DiffResult::InnerProblem(err) => &err,
+                    DiffResult::Trouble(err) => &err,
+                    _ => "UNDEFINED BEHAVIOUR OF GET_PROBLEM FUNCTION"
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct TestResult {
     name: String,
@@ -66,10 +83,24 @@ impl TestResult {
         result
     }
 
+    pub fn get_name(&self) -> String {
+        let mut iterator = self.name.split('/');
+        let name = iterator.last().unwrap();
+        name.to_string()
+    }
+
+    pub fn get_time(&self) -> f32 {
+        self.time
+    }
+
     fn get_stderr_file(&self) -> String {
         let mut result = self.get_core();
         result.push_str(".err");
         result
+    }
+
+    pub fn passed(&self) -> bool {
+        self.passed
     }
 
     fn run_valgrind(&mut self, index: usize, program: &str) -> bool {
@@ -197,6 +228,37 @@ impl TestResult {
             }
         }
     }
+
+    pub fn get_problem_description(&self) -> String {
+        match &self.failed_cause {
+            TestFail::Valgrind(_) => {
+                "Valgrind ERROR".to_string()
+            },
+            TestFail::Diff(diff_error) => {
+                match diff_error {
+                    DiffResult::Difference(_) => {
+                        "Diff ERROR: Difference".to_string()
+                    },
+                    DiffResult::InnerProblem(_) => {
+                        "Diff ERROR: InnerProblem".to_string()
+                    }
+                    DiffResult::Trouble(_) => {
+                        "Diff ERROR: Trouble".to_string()
+                    }
+                    _ => {
+                        "PROGRAM UNDEFINED DIFF ERROR".to_string()
+                    }
+                }
+            },
+            TestFail::InnerProblem(_) => {
+                "PROGRAM INNER PROBLEM".to_string()
+            }
+        }
+    }
+
+    pub fn get_problem(&self) -> &str {
+        self.failed_cause.get_problem()
+    }
 }
 
 fn is_infile(to_test: &DirEntry) -> bool {
@@ -243,5 +305,17 @@ mod tests {
         };
         
         assert!(ts.get_stderr_file() == "/usr/bin/a/b/c/def.err");
+    }
+
+    #[test]
+    fn get_name_test() {
+        let ts = TestResult {
+            name: "/usr/bin/a/b/c/def.in".to_string(),
+            passed: false,
+            time: 0.0,
+            failed_cause: TestFail::InnerProblem("".to_string())
+        };
+
+        assert!(ts.get_name() == "def.in");
     }
 }
