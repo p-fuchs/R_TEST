@@ -4,7 +4,7 @@ mod interface;
 mod testing;
 
 fn main() {
-    let x = settings::Options::new();
-    interface::invoke(&x);
+    let mut x = settings::Options::new();
+    interface::invoke(&mut x);
     x.save();
 }

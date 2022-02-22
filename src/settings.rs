@@ -21,6 +21,34 @@ impl Options {
         &self.test_root_directory
     }
 
+    pub fn get_valgrind_activity(&self) -> bool {
+        self.is_valgrind_active
+    }
+
+    pub fn set_test_path(&mut self, path: &str) -> bool {
+        use std::path::Path;
+        if Path::new(path).is_dir() {
+            self.test_root_directory = path.to_string();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn set_program_path(&mut self, path: &str) -> bool {
+        use std::path::Path;
+        if Path::new(path).is_file() {
+            self.program_executable_path = path.to_string();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn set_valgrind_activity(&mut self, option: bool) {
+        self.is_valgrind_active = option;
+    }
+
     pub fn get_program_path(&self) -> &str {
         &self.program_executable_path
     }

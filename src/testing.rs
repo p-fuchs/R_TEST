@@ -18,19 +18,21 @@ enum TestFail {
     Diff(DiffResult),
     //LackOfStdout,
     //LackOfStderr,
-    InnerProblem(String)
+    InnerProblem(String),
+    ProgramExitCode(String)
 }
 
 impl TestFail {
     fn get_problem(&self) -> &str {
         match self {
-            TestFail::Valgrind(err) => &err,
-            TestFail::InnerProblem(err) => &err,
+            TestFail::Valgrind(err) => err,
+            TestFail::InnerProblem(err) => err,
+            TestFail::ProgramExitCode(err) => err,
             TestFail::Diff(diff_error) => {
                 match diff_error {
-                    DiffResult::Difference(err) => &err,
-                    DiffResult::InnerProblem(err) => &err,
-                    DiffResult::Trouble(err) => &err,
+                    DiffResult::Difference(err) => err,
+                    DiffResult::InnerProblem(err) => err,
+                    DiffResult::Trouble(err) => err,
                     _ => "UNDEFINED BEHAVIOUR OF GET_PROBLEM FUNCTION"
                 }
             }
@@ -54,6 +56,14 @@ impl TestResult {
             time: 0.0,
             failed_cause: TestFail::InnerProblem("".to_string())
         }
+    }
+
+    pub fn valgrind_error(&self) -> bool {
+        matches!(self.failed_cause, TestFail::Valgrind(_))
+    }
+
+    pub fn diff_error(&self) -> bool {
+        matches!(self.failed_cause, TestFail::Diff(_))
     }
 
     fn load(path: &str) -> Vec<TestResult> {
@@ -84,7 +94,7 @@ impl TestResult {
     }
 
     pub fn get_name(&self) -> String {
-        let mut iterator = self.name.split('/');
+        let iterator = self.name.split('/');
         let name = iterator.last().unwrap();
         name.to_string()
     }
@@ -101,6 +111,56 @@ impl TestResult {
 
     pub fn passed(&self) -> bool {
         self.passed
+    }
+
+    fn run_program(&mut self, index: usize, program: &str) -> bool {
+        let divert_output = format!("rtest_stdout{}", index);
+        let divert_error = format!("rtest_stderr{}", index);
+        let mut input_file = File::open(&self.name).expect("Failed to open input");
+        let mut output_file = File::create(divert_output).expect("Failed to open outputFile");
+        let mut error_file = File::create(divert_error).expect("Failed to create errorFile");
+
+        let mut process = Command::new(program)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("ERROR: Spawning child process of Program FAILED.");
+        
+        io::copy(&mut input_file, process.stdin.as_mut().unwrap()).unwrap();
+
+        let process = process.wait_with_output();
+
+        match process {
+            Err(e) => {
+                self.failed_cause = TestFail::InnerProblem(e.to_string());
+                false
+            },
+            Ok(output) => {
+                let status = output.status
+                    .code()
+                    .expect("ERROR: Reading output status of Program FAILED.");
+                
+                match status {
+                    0 => {
+                        let stdout_result = String::from_utf8_lossy(&output.stdout).to_string();
+                        let stderr_result = String::from_utf8_lossy(&output.stderr).to_string();
+                        write!(&mut output_file, "{}", stdout_result).unwrap();
+                        write!(&mut error_file, "{}", stderr_result).unwrap();
+                        true
+                    }
+                    other => {
+                        self.failed_cause = TestFail::ProgramExitCode(other.to_string());
+                        let stdout_result = String::from_utf8_lossy(&output.stdout).to_string();
+                        let stderr_result = String::from_utf8_lossy(&output.stderr).to_string();
+                        write!(&mut output_file, "{}", stdout_result).unwrap();
+                        write!(&mut error_file, "{}", stderr_result).unwrap();
+                        true
+                    }
+                }
+            }
+        }
+
     }
 
     fn run_valgrind(&mut self, index: usize, program: &str) -> bool {
@@ -202,6 +262,27 @@ impl TestResult {
             .as_secs_f32();
     }
 
+    fn test_no_valgrind(&mut self, program_path: &str, index: usize) {
+        use std::time::SystemTime;
+        let beggining = SystemTime::now();
+
+        if self.run_program(index, program_path) && self.run_diff(index) {
+            self.passed = true;
+        }
+
+        let stdout = format!("rtest_stdout{}", index);
+        let stderr = format!("rtest_stderr{}", index);
+        let _ = fs::remove_file(stdout);
+        let _ = fs::remove_file(stderr);
+
+        self.time = SystemTime::now()
+            .duration_since(beggining)
+            .unwrap_or_else(|_| panic!("ERROR: Time calculation of {:?} FAILED.", self.name))
+            .as_secs_f32();
+    }
+
+
+
     fn run_diff(&mut self, index: usize) -> bool {
         let stdout_input = format!("rtest_stdout{}", index);
         let stderr_input = format!("rtest_stderr{}", index);
@@ -231,6 +312,9 @@ impl TestResult {
 
     pub fn get_problem_description(&self) -> String {
         match &self.failed_cause {
+            TestFail::ProgramExitCode(_) => {
+                "Program EXITCODE".to_string()
+            },
             TestFail::Valgrind(_) => {
                 "Valgrind ERROR".to_string()
             },
@@ -271,11 +355,21 @@ fn is_infile(to_test: &DirEntry) -> bool {
 
 pub fn run_testing(settings: &Options) -> Vec<TestResult> {
     let mut list = TestResult::load(settings.get_test_path());
-    list.par_iter_mut()
+    
+    if settings.get_valgrind_activity() {
+        list.par_iter_mut()
         .enumerate()
         .for_each(|(index, frame)| {
             frame.test_with_valgrind(settings.get_program_path(), index)
         });
+    } else {
+        list.par_iter_mut()
+        .enumerate()
+        .for_each(|(index, frame)| {
+            frame.test_no_valgrind(settings.get_program_path(), index)
+        });
+    }
+
     list
 }
 

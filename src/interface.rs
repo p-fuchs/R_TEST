@@ -1,4 +1,5 @@
 use std::io::{self, Write};
+use std::fs::{File};
 use crate::settings::Options;
 use prettytable::{Table, Row, Cell, row, Attr, color};
 use crate::testing::{self, TestResult};
@@ -14,6 +15,25 @@ fn print_title() {
     \\__/ \\__/  \\__/(___/ (__) (___)(___/ (__)");
 }
 
+fn print_options(settings: &Options) {
+    println!("                    _ (`-.  .-') _                            .-') _   .-')    
+               ( (OO  )(  OO) )                          ( OO ) ) ( OO ).  
+ .-'),-----.  _.`     \\/     '._ ,-.-')  .-'),-----. ,--./ ,--,' (_)---\\_) 
+( OO'  .-.  '(__...--''|'--...__)|  |OO)( OO'  .-.  '|   \\ |  |\\ /    _ |  
+/   |  | |  | |  /  | |'--.  .--'|  |  \\/   |  | |  ||    \\|  | )\\  :` `.  
+\\_) |  |\\|  | |  |_.' |   |  |   |  |(_/\\_) |  |\\|  ||  .     |/  '..`''.) 
+  \\ |  | |  | |  .___.'   |  |  ,|  |_.'  \\ |  | |  ||  |\\    |  .-._)   \\ 
+   `'  '-'  ' |  |        |  | (_|  |      `'  '-'  '|  | \\   |  \\       / 
+     `-----'  `--'        `--'   `--'        `-----' `--'  `--'   `-----'");
+    
+    println!("        1)    Test directory: {}", settings.get_test_path());
+    println!("        2)      Program path: {}", settings.get_program_path());
+    println!("        3) Valgrind activity: {}", settings.get_valgrind_activity());
+    println!("        WARNING: Please use ABSOLUTE PATHS!\n");
+    print!("        Wybierz opcję (4 powoduje powrót): ");
+    let _ = io::stdout().flush();
+}
+
 fn print_menu() {
     print_title();
     println!("            1. Rozpocznij testy");
@@ -23,9 +43,96 @@ fn print_menu() {
     let _ = io::stdout().flush();
 }
 
-pub fn invoke(settings: &Options) {
+fn manage_options(settings: &mut Options) {
     clear_console();
-    print_menu();
+    print_options(settings);
+    let choice = read_input(4);
+
+    match choice {
+        1 => {
+            manage_test_dir(settings);
+            manage_options(settings);
+        },
+        2 => {
+            manage_program_path(settings);
+            manage_options(settings);
+        },
+        3 => {
+            manage_valgrind_activity(settings);
+            manage_options(settings);
+        },
+        _ => {}
+    }
+}
+
+fn manage_test_dir(settings: &mut Options) {
+    loop {
+        print!("Podaj scieżkę do folderu z testami: ");
+        let _ = io::stdout().flush();
+        let mut path = String::new();
+
+        io::stdin()
+            .read_line(&mut path)
+            .expect("IO ERROR");
+        
+        let path_trimmed = path.trim();
+        if settings.set_test_path(path_trimmed){
+            break;
+        } else {
+            println!("Podano nieprawidłową ścieżkę!");
+        }
+    }
+}
+
+fn manage_program_path(settings: &mut Options) {
+    loop {
+        print!("Podaj scieżkę do skompilowanego programu: ");
+        let _ = io::stdout().flush();
+        let mut path = String::new();
+
+        io::stdin()
+            .read_line(&mut path)
+            .expect("IO ERROR");
+        
+        let path_trimmed = path.trim();
+        if settings.set_program_path(path_trimmed){
+            break;
+        } else {
+            println!("Podano nieprawidłową ścieżkę!");
+        }
+    }
+}
+
+fn manage_valgrind_activity(settings: &mut Options) {
+    loop {
+        print!("Użycie valgrinda: (true/false) ");
+        let _ = io::stdout().flush();
+        let mut option = String::new();
+
+        io::stdin()
+            .read_line(&mut option)
+            .expect("IO ERROR");
+            
+        let option_trimmed = option.trim().to_ascii_lowercase();
+        let option_cleaned = option_trimmed.as_str();
+
+        match option_cleaned {
+            "true" => {
+                settings.set_valgrind_activity(true);
+                break;
+            },
+            "false" => {
+                settings.set_valgrind_activity(false);
+                break;
+            },
+            _ => {
+                println!("Podano nieprawidłową wartość!");
+            }
+        }
+    }
+}
+
+pub fn read_input(maximum_number: u8) -> u8{
     let mut choice: u8;
     loop {
         let mut input = String::new();
@@ -36,7 +143,7 @@ pub fn invoke(settings: &Options) {
         } else if let Ok(parsed) = input.trim().parse() {
             choice = parsed;
 
-            if (1..=3).contains(&choice) {
+            if (1..=maximum_number).contains(&choice) {
                 break;
             } else {
                 println!("Błąd wczytywania. Podaj prawidłową cyfrę.");
@@ -51,13 +158,27 @@ pub fn invoke(settings: &Options) {
         
         input.clear();
     }
+    choice
+}
+
+pub fn invoke(settings: &mut Options) {
+    clear_console();
+    print_menu();
+    let choice = read_input(3);
 
     match choice {
         1 => {
             let results = testing::run_testing(settings);
             print_results(&results);
         }
-        _ => panic!("NIE")
+        3 => {
+            clear_console();
+            println!("Program kończy swoje działanie.");
+        }
+        _ => {
+            manage_options(settings);
+            invoke(settings);
+        }
     }
 }
 
@@ -82,7 +203,7 @@ fn truncate(text: &str) -> String {
     result
 }
 
-fn print_results(results: &Vec<TestResult>) {
+fn print_table(results: &[TestResult]){
     let mut show_result = Table::new();
 
     show_result.add_row(row!["ID", "NAME", "TIME", "PASSED", "PROBLEM"]);
@@ -102,9 +223,9 @@ fn print_results(results: &Vec<TestResult>) {
             ]));
         } else {
             let mut description = result.get_problem_description();
-            description.push_str(": ");
+            description.push_str(": \n");
             let problem = result.get_problem();
-            description.push_str(&truncate(&problem));
+            description.push_str(&truncate(problem));
             show_result.add_row(Row::new(vec![
                 Cell::new(&id),
                 Cell::new(&name),
@@ -115,7 +236,75 @@ fn print_results(results: &Vec<TestResult>) {
             ]));
         }
     }
-
-    clear_console();
     show_result.printstd();
+    let content = show_result.to_string();
+    let mut output = File::create("history.log").unwrap();
+    let _ = write!(output, "{}", content);
+}
+
+fn print_summary(results: &[TestResult]) {
+    let mut passed = 0;
+    let mut valgrind_failed = 0;
+    let mut diff_failed = 0;
+    let mut other_failed = 0;
+    
+    for result in results {
+        if result.passed() {
+            passed += 1;
+        } else if result.diff_error() {
+            diff_failed += 1;
+        } else if result.valgrind_error() {
+            valgrind_failed += 1;
+        } else {
+            other_failed += 1;
+        }
+        
+    }
+
+    let mut summary = Table::new();
+    summary.add_row(Row::new(vec![
+        Cell::new("TOTAL")
+            .with_style(Attr::ForegroundColor(color::BRIGHT_CYAN)),
+        Cell::new(&(passed + valgrind_failed + other_failed + diff_failed).to_string())
+    ]));
+
+    summary.add_row(Row::new(vec![
+        Cell::new("PASSED")
+            .with_style(Attr::ForegroundColor(color::GREEN)),
+        Cell::new(&passed.to_string())
+    ]));
+
+    summary.add_row(Row::new(vec![
+        Cell::new("FAILED")
+            .with_style(Attr::ForegroundColor(color::RED)),
+        Cell::new(&(valgrind_failed + other_failed + diff_failed).to_string())
+    ]));
+
+
+    summary.add_row(Row::new(vec![
+        Cell::new("VALGRIND FAILED")
+            .with_style(Attr::ForegroundColor(color::RED)),
+        Cell::new(&valgrind_failed.to_string())
+    ]));
+
+    summary.add_row(Row::new(vec![
+        Cell::new("DIFF FAILED")
+            .with_style(Attr::ForegroundColor(color::RED)),
+        Cell::new(&diff_failed.to_string())
+    ]));
+
+    summary.add_row(Row::new(vec![
+        Cell::new("OTHER FAIL")
+            .with_style(Attr::ForegroundColor(color::RED)),
+        Cell::new(&other_failed.to_string())
+    ]));
+
+    summary.printstd();
+}
+
+fn print_results(results: &[TestResult]) {
+    clear_console();
+    print_table(results);
+    println!();
+    print_summary(results);
 }
