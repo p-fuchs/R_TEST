@@ -5,6 +5,7 @@ use rayon::prelude::*;
 use crate::settings::Options;
 use std::process::{Command, Stdio};
 
+/// Results which can occur while using diff
 #[derive(Debug)]
 enum DiffResult {
     Ok,
@@ -12,17 +13,20 @@ enum DiffResult {
     Trouble(String),
     InnerProblem(String)
 }
+/// Possible causes of failing tests
 #[derive(Debug)]
 enum TestFail {
     Valgrind(String),
     Diff(DiffResult),
-    //LackOfStdout,
-    //LackOfStderr,
     InnerProblem(String),
     ProgramExitCode(String)
 }
 
 impl TestFail {
+
+    /**
+    Gets a problem description
+    */
     fn get_problem(&self) -> &str {
         match self {
             TestFail::Valgrind(err) => err,
@@ -40,32 +44,45 @@ impl TestFail {
     }
 }
 
+/// Structure to manage testing
 #[derive(Debug)]
 pub struct TestResult {
-    name: String,
+    test_path: String,
     passed: bool,
     time: f32,
     failed_cause: TestFail
 }
 
 impl TestResult {
+
+    /**
+    Creates new structure with given absolute path of test
+    */
     fn new(path: &str) -> TestResult {
         TestResult {
-            name: path.to_string(),
+            test_path: path.to_string(),
             passed: false,
             time: 0.0,
             failed_cause: TestFail::InnerProblem("".to_string())
         }
     }
 
+    /// Returns wheter there occured valgrind error while testing (true - occured).
+    /// WARNING: It should be used only on struct, which was tested in the past
     pub fn valgrind_error(&self) -> bool {
         matches!(self.failed_cause, TestFail::Valgrind(_))
     }
 
+    /// Returns wheter there occured diff error while testing (true - occured)
+    /// WARNING: It should be used only on struct, which was tested in the past.
     pub fn diff_error(&self) -> bool {
         matches!(self.failed_cause, TestFail::Diff(_))
     }
 
+    /**
+    Creates a vector of TestResults from every single file with .in extension
+    in given absolue path.
+    */
     fn load(path: &str) -> Vec<TestResult> {
         let source = fs::read_dir(path)
             .expect("ERROR: Opening directory with tests FAILED.");
@@ -80,43 +97,63 @@ impl TestResult {
         result
     }
 
+    /**
+    Returns a whole path without extension.
+    EXAMPLE: test_path = /usr/bin/abc.de -> /usr/bin/abc
+    */
     fn get_core(&self) -> String {
         let mut result = String::new();
-        let mut iterator = self.name.split('.');
+        let mut iterator = self.test_path.split('.');
         result.push_str(iterator.next().unwrap());
         result
     }
 
+    /**
+    Returns a path of .out file.
+    EXAMPLE -> test_path = /usr/bin/abc.de -> /usr/bin/abc.out
+    */
     fn get_stdout_file(&self) -> String {
         let mut result = self.get_core();
         result.push_str(".out");
         result
     }
 
+    /// Returns a name of testfile.
+    /// EXAMPLE -> test_path = /usr/bin/abc.de -> abc.in
     pub fn get_name(&self) -> String {
-        let iterator = self.name.split('/');
-        let name = iterator.last().unwrap();
-        name.to_string()
+        let iterator = self.test_path.split('/');
+        let test_path = iterator.last().unwrap();
+        test_path.to_string()
     }
 
     pub fn get_time(&self) -> f32 {
         self.time
     }
 
+    /**
+    Returns a path of .err file.
+    EXAMPLE -> test_path = /usr/bin/abc.de -> /usr/bin/abc.err
+    */
     fn get_stderr_file(&self) -> String {
         let mut result = self.get_core();
         result.push_str(".err");
         result
     }
 
+    /// Returns true when test was succesfully done.
+    /// WARNING: It should be used only on struct, which was tested in the past.
     pub fn passed(&self) -> bool {
         self.passed
     }
 
+    /**
+    Runs a program without valgrind and saves its stdout and stderr to a file in main directory,
+    which is based of index. Index should be an unique number to all of the conducted tests.
+    */
     fn run_program(&mut self, index: usize, program: &str) -> bool {
         let divert_output = format!("rtest_stdout{}", index);
         let divert_error = format!("rtest_stderr{}", index);
-        let mut input_file = File::open(&self.name).expect("Failed to open input");
+        let mut input_file = File::open(&self.test_path).expect("Failed to open input");
         let mut output_file = File::create(divert_output).expect("Failed to open outputFile");
         let mut error_file = File::create(divert_error).expect("Failed to create errorFile");
 
@@ -163,10 +200,14 @@ impl TestResult {
 
     }
 
+    /**
+    Runs a program with valgrind and saves its stdout and stderr to a file in main directory,
+    which is based of index. Index should be an unique number to all of the conducted tests.
+    */
     fn run_valgrind(&mut self, index: usize, program: &str) -> bool {
         let divert_output = format!("rtest_stdout{}", index);
         let divert_error = format!("rtest_stderr{}", index);
-        let mut input_file = File::open(&self.name).expect("Failed to open input");
+        let mut input_file = File::open(&self.test_path).expect("Failed to open input");
         let mut output_file = File::create(divert_output).expect("Failed to open outputFile");
         let mut error_file = File::create(divert_error).expect("Failed to create errorFile");
 
@@ -212,6 +253,10 @@ impl TestResult {
         }
     }
 
+    /**
+    Compares two files using diff program. input_diff indicates path to program generated file
+    output_diff indicates path to template file
+    */
     fn diff_files(input_diff: &str, output_diff: &str) -> DiffResult {
         let process = Command::new("diff")
             .arg("-c")
@@ -244,10 +289,13 @@ impl TestResult {
         }
     }
 
-    fn test_with_valgrind(&mut self, program_path: &str, index: usize) {
+    /**
+    Conducts a test process with using valgrind
+    */
+    fn test_with_valgrind(&mut self, program_path: &str, index: usize, use_stderr: bool) {
         use std::time::SystemTime;
         let beggining = SystemTime::now();
-        if self.run_valgrind(index, program_path) && self.run_diff(index){
+        if self.run_valgrind(index, program_path) && self.run_diff(index, use_stderr){
             self.passed = true;
         }
 
@@ -258,15 +306,18 @@ impl TestResult {
 
         self.time = SystemTime::now()
             .duration_since(beggining)
-            .unwrap_or_else(|_| panic!("ERROR: Time_calculation of {:?} FAILED.", self.name))
+            .unwrap_or_else(|_| panic!("ERROR: Time_calculation of {:?} FAILED.", self.test_path))
             .as_secs_f32();
     }
 
-    fn test_no_valgrind(&mut self, program_path: &str, index: usize) {
+    /**
+    Conducts a test process without using valgrind
+    */
+    fn test_no_valgrind(&mut self, program_path: &str, index: usize, use_stderr: bool) {
         use std::time::SystemTime;
         let beggining = SystemTime::now();
 
-        if self.run_program(index, program_path) && self.run_diff(index) {
+        if self.run_program(index, program_path) && self.run_diff(index, use_stderr) {
             self.passed = true;
         }
 
@@ -277,13 +328,14 @@ impl TestResult {
 
         self.time = SystemTime::now()
             .duration_since(beggining)
-            .unwrap_or_else(|_| panic!("ERROR: Time calculation of {:?} FAILED.", self.name))
+            .unwrap_or_else(|_| panic!("ERROR: Time calculation of {:?} FAILED.", self.test_path))
             .as_secs_f32();
     }
 
-
-
-    fn run_diff(&mut self, index: usize) -> bool {
+    /**
+    Runs diff on program output. Index indicate test index
+    */
+    fn run_diff(&mut self, index: usize, use_stderr: bool) -> bool {
         let stdout_input = format!("rtest_stdout{}", index);
         let stderr_input = format!("rtest_stderr{}", index);
         let stdout_output = self.get_stdout_file();
@@ -299,17 +351,22 @@ impl TestResult {
             }
         }
 
-        let stderr_result = TestResult::diff_files(&stderr_input, &stderr_output);
+        if use_stderr {
+            let stderr_result = TestResult::diff_files(&stderr_input, &stderr_output);
 
-        match stderr_result {
-            DiffResult::Ok => true,
-            other => {
-                self.failed_cause = TestFail::Diff(other);
-                false
+            match stderr_result {
+                DiffResult::Ok => true,
+                other => {
+                    self.failed_cause = TestFail::Diff(other);
+                    false
+                }
             }
+        } else {
+            true
         }
     }
 
+    /// Returns 'title' of problem which has occured while testing
     pub fn get_problem_description(&self) -> String {
         match &self.failed_cause {
             TestFail::ProgramExitCode(_) => {
@@ -340,19 +397,24 @@ impl TestResult {
         }
     }
 
+    /// Returns a problem description of failed test
     pub fn get_problem(&self) -> &str {
         self.failed_cause.get_problem()
     }
 }
 
+/**
+Checks wheter a given file is a file containing input
+*/
 fn is_infile(to_test: &DirEntry) -> bool {
-    let file_name = to_test.path();
-    let extension = file_name.extension()
-        .unwrap_or_else(|| panic!("ERROR: Reading extension of {:?} FAILED.", &file_name));
+    let file_test_path = to_test.path();
+    let extension = file_test_path.extension()
+        .unwrap_or_else(|| panic!("ERROR: Reading extension of {:?} FAILED.", &file_test_path));
 
     extension == "in"
 }
 
+/// Main function to run tests. Produces a vector of results.
 pub fn run_testing(settings: &Options) -> Vec<TestResult> {
     let mut list = TestResult::load(settings.get_test_path());
     
@@ -360,13 +422,13 @@ pub fn run_testing(settings: &Options) -> Vec<TestResult> {
         list.par_iter_mut()
         .enumerate()
         .for_each(|(index, frame)| {
-            frame.test_with_valgrind(settings.get_program_path(), index)
+            frame.test_with_valgrind(settings.get_program_path(), index, settings.get_stderr_option())
         });
     } else {
         list.par_iter_mut()
         .enumerate()
         .for_each(|(index, frame)| {
-            frame.test_no_valgrind(settings.get_program_path(), index)
+            frame.test_no_valgrind(settings.get_program_path(), index, settings.get_stderr_option())
         });
     }
 
@@ -380,7 +442,7 @@ mod tests {
     #[test]
     fn get_stdout_test() {
         let ts = TestResult {
-            name: "/usr/bin/a/b/c/def.in".to_string(),
+            test_path: "/usr/bin/a/b/c/def.in".to_string(),
             passed: false,
             time: 0.0,
             failed_cause: TestFail::InnerProblem("".to_string())
@@ -392,7 +454,7 @@ mod tests {
     #[test]
     fn get_stderr_test() {
         let ts = TestResult {
-            name: "/usr/bin/a/b/c/def.in".to_string(),
+            test_path: "/usr/bin/a/b/c/def.in".to_string(),
             passed: false,
             time: 0.0,
             failed_cause: TestFail::InnerProblem("".to_string())
@@ -402,9 +464,9 @@ mod tests {
     }
 
     #[test]
-    fn get_name_test() {
+    fn get_test_path_test() {
         let ts = TestResult {
-            name: "/usr/bin/a/b/c/def.in".to_string(),
+            test_path: "/usr/bin/a/b/c/def.in".to_string(),
             passed: false,
             time: 0.0,
             failed_cause: TestFail::InnerProblem("".to_string())

@@ -29,8 +29,9 @@ fn print_options(settings: &Options) {
     println!("        1)    Test directory: {}", settings.get_test_path());
     println!("        2)      Program path: {}", settings.get_program_path());
     println!("        3) Valgrind activity: {}", settings.get_valgrind_activity());
+    println!("        4)   Stderr activity: {}", settings.get_stderr_option());
     println!("        WARNING: Please use ABSOLUTE PATHS!\n");
-    print!("        Wybierz opcję (4 powoduje powrót): ");
+    print!("        Wybierz opcję (5 powoduje powrót): ");
     let _ = io::stdout().flush();
 }
 
@@ -43,6 +44,9 @@ fn print_menu() {
     let _ = io::stdout().flush();
 }
 
+/**
+Drive options menu
+*/
 fn manage_options(settings: &mut Options) {
     clear_console();
     print_options(settings);
@@ -61,6 +65,10 @@ fn manage_options(settings: &mut Options) {
             manage_valgrind_activity(settings);
             manage_options(settings);
         },
+        4 => {
+            manage_stderr_activity(settings);
+            manage_options(settings);
+        }
         _ => {}
     }
 }
@@ -103,36 +111,65 @@ fn manage_program_path(settings: &mut Options) {
     }
 }
 
+fn read_bool_stdin() -> Option<bool> {
+    let mut option = String::new();
+    io::stdin()
+        .read_line(&mut option)
+        .expect("IO ERROR");
+        
+    let option_trimmed = option.trim().to_ascii_lowercase();
+    let option_cleaned = option_trimmed.as_str();
+
+    match option_cleaned {
+        "true" => {
+            Some(true)
+        },
+        "false" => {
+            Some(false)
+        },
+        _ => {
+            None
+        }
+    }
+}
+
 fn manage_valgrind_activity(settings: &mut Options) {
     loop {
         print!("Użycie valgrinda: (true/false) ");
         let _ = io::stdout().flush();
-        let mut option = String::new();
 
-        io::stdin()
-            .read_line(&mut option)
-            .expect("IO ERROR");
-            
-        let option_trimmed = option.trim().to_ascii_lowercase();
-        let option_cleaned = option_trimmed.as_str();
-
-        match option_cleaned {
-            "true" => {
-                settings.set_valgrind_activity(true);
+        match read_bool_stdin() {
+            Some(option) => {
+                settings.set_valgrind_activity(option);
                 break;
-            },
-            "false" => {
-                settings.set_valgrind_activity(false);
-                break;
-            },
-            _ => {
+            }
+            None => {
                 println!("Podano nieprawidłową wartość!");
             }
         }
     }
 }
 
-pub fn read_input(maximum_number: u8) -> u8{
+fn manage_stderr_activity(settings: &mut Options) {
+    loop {
+        print!("Użycie testów stderr: (true/false) ");
+        let _ = io::stdout().flush();
+
+        match read_bool_stdin() {
+            Some(option) => {
+                settings.set_stderr_usage(option);
+                break;
+            }
+            None => {
+                println!("Podano nieprawidłową wartość!");
+            }
+        }
+    }
+}
+
+/// Reads a positive number from stdandard input, then checks wheter the number is
+/// less or equal to maximum_number and returns it.
+fn read_input(maximum_number: u8) -> u8{
     let mut choice: u8;
     loop {
         let mut input = String::new();
@@ -161,7 +198,8 @@ pub fn read_input(maximum_number: u8) -> u8{
     choice
 }
 
-pub fn invoke(settings: &mut Options) {
+/// Starts a whole program interface
+pub fn start_program(settings: &mut Options) {
     clear_console();
     print_menu();
     let choice = read_input(3);
@@ -177,11 +215,14 @@ pub fn invoke(settings: &mut Options) {
         }
         _ => {
             manage_options(settings);
-            invoke(settings);
+            start_program(settings);
         }
     }
 }
 
+/**
+Add a endline char every 200 characters without newline.
+*/
 fn truncate(text: &str) -> String {
     let mut result = String::new();
     let mut char_number = 0;
@@ -203,6 +244,10 @@ fn truncate(text: &str) -> String {
     result
 }
 
+/**
+Prints a table with results of tests and saves it to a history.log file in
+main directory
+*/
 fn print_table(results: &[TestResult]){
     let mut show_result = Table::new();
 
@@ -242,6 +287,9 @@ fn print_table(results: &[TestResult]){
     let _ = write!(output, "{}", content);
 }
 
+/**
+Prints out summary of conducted tests
+*/
 fn print_summary(results: &[TestResult]) {
     let mut passed = 0;
     let mut valgrind_failed = 0;
@@ -302,6 +350,9 @@ fn print_summary(results: &[TestResult]) {
     summary.printstd();
 }
 
+/**
+Prints summary and table of conducted tests.
+*/
 fn print_results(results: &[TestResult]) {
     clear_console();
     print_table(results);
