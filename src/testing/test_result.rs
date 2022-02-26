@@ -1,52 +1,9 @@
-use std::fs::{self, DirEntry, File};
-use std::io::{self, Write};
-use rayon::prelude::*;
-
-use crate::settings::Options;
 use std::process::{Command, Stdio};
+use std::fs::{self, File};
+use std::io::{Write, self};
 
-/// Results which can occur while using diff
-#[derive(Debug)]
-enum DiffResult {
-    Ok,
-    DifferenceNotSpecified(String),
-    DifferenceStderr(String),
-    DifferenceStdout(String),
-    Trouble(String),
-    InnerProblem(String)
-}
-/// Possible causes of failing tests
-#[derive(Debug)]
-enum TestFail {
-    Valgrind(String),
-    Diff(DiffResult),
-    InnerProblem(String),
-    ProgramExitCode(String)
-}
-
-impl TestFail {
-
-    /**
-    Gets a problem description
-    */
-    fn get_problem(&self) -> &str {
-        match self {
-            TestFail::Valgrind(err) => err,
-            TestFail::InnerProblem(err) => err,
-            TestFail::ProgramExitCode(err) => err,
-            TestFail::Diff(diff_error) => {
-                match diff_error {
-                    DiffResult::DifferenceStderr(err) => err,
-                    DiffResult::DifferenceStdout(err) => err,
-                    DiffResult::InnerProblem(err) => err,
-                    DiffResult::Trouble(err) => err,
-                    _ => "UNDEFINED BEHAVIOUR OF GET_PROBLEM FUNCTION"
-                }
-            }
-        }
-    }
-}
-
+use super::test_enums::{TestFail, DiffResult};
+use super::is_infile;
 /// Structure to manage testing
 #[derive(Debug)]
 pub struct TestResult {
@@ -86,7 +43,7 @@ impl TestResult {
     Creates a vector of TestResults from every single file with .in extension
     in given absolue path.
     */
-    fn load(path: &str) -> Vec<TestResult> {
+    pub(super) fn load(path: &str) -> Vec<TestResult> {
         let source = fs::read_dir(path)
             .expect("ERROR: Opening directory with tests FAILED.");
 
@@ -295,7 +252,7 @@ impl TestResult {
     /**
     Conducts a test process with using valgrind
     */
-    fn test_with_valgrind(&mut self, program_path: &str, index: usize, use_stderr: bool) {
+    pub(super) fn test_with_valgrind(&mut self, program_path: &str, index: usize, use_stderr: bool) {
         use std::time::SystemTime;
         let beggining = SystemTime::now();
         if self.run_valgrind(index, program_path) && self.run_diff(index, use_stderr){
@@ -316,7 +273,7 @@ impl TestResult {
     /**
     Conducts a test process without using valgrind
     */
-    fn test_no_valgrind(&mut self, program_path: &str, index: usize, use_stderr: bool) {
+    pub(super) fn test_no_valgrind(&mut self, program_path: &str, index: usize, use_stderr: bool) {
         use std::time::SystemTime;
         let beggining = SystemTime::now();
 
@@ -418,42 +375,10 @@ impl TestResult {
     }
 }
 
-/**
-Checks wheter a given file is a file containing input
-*/
-fn is_infile(to_test: &DirEntry) -> bool {
-    let file_test_path = to_test.path();
-    let extension = file_test_path.extension()
-        .unwrap_or_else(|| panic!("ERROR: Reading extension of {:?} FAILED.", &file_test_path));
-
-    extension == "in"
-}
-
-/// Main function to run tests. Produces a vector of results.
-pub fn run_testing(settings: &Options) -> Vec<TestResult> {
-    let mut list = TestResult::load(settings.get_test_path());
-    
-    if settings.get_valgrind_activity() {
-        list.par_iter_mut()
-        .enumerate()
-        .for_each(|(index, frame)| {
-            frame.test_with_valgrind(settings.get_program_path(), index, settings.get_stderr_option())
-        });
-    } else {
-        list.par_iter_mut()
-        .enumerate()
-        .for_each(|(index, frame)| {
-            frame.test_no_valgrind(settings.get_program_path(), index, settings.get_stderr_option())
-        });
-    }
-
-    list
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    
     #[test]
     fn get_stdout_test() {
         let ts = TestResult {
