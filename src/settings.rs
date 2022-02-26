@@ -10,19 +10,21 @@ pub struct Options {
     use_stderr_tests: bool
 }
 
-impl Options {
+impl Default for Options {
     /**
     Default structure of settings.
     */
     fn default() -> Options {
         Options {
             test_root_directory: "testy/".to_string(),
-            program_executable_path: ".".to_string(),
+            program_executable_path: "PLEASE, SET!".to_string(),
             is_valgrind_active: true,
             use_stderr_tests: false
         }
     }
+}
 
+impl Options {
     /// Return absolute path to folder with tests
     pub fn get_test_path(&self) -> &str {
         &self.test_root_directory

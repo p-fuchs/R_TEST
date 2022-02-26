@@ -50,7 +50,7 @@ Drive options menu
 fn manage_options(settings: &mut Options) {
     clear_console();
     print_options(settings);
-    let choice = read_input(4);
+    let choice = read_input(5);
 
     match choice {
         1 => {
@@ -260,8 +260,10 @@ fn print_table(results: &[TestResult]){
             time.push_str(" s");
             show_result.add_row(Row::new(vec![
                 Cell::new(&id),
-                Cell::new(&name),
-                Cell::new(&time),
+                Cell::new(&name)
+                    .with_style(Attr::ForegroundColor(color::BRIGHT_CYAN)),
+                Cell::new(&time)
+                    .with_style(Attr::ForegroundColor(color::YELLOW)),
                 Cell::new("TRUE")
                     .with_style(Attr::ForegroundColor(color::GREEN)),
                 Cell::new("-")
@@ -273,7 +275,8 @@ fn print_table(results: &[TestResult]){
             description.push_str(&truncate(problem));
             show_result.add_row(Row::new(vec![
                 Cell::new(&id),
-                Cell::new(&name),
+                Cell::new(&name)
+                    .with_style(Attr::ForegroundColor(color::BRIGHT_CYAN)),
                 Cell::new("-"),
                 Cell::new("FALSE")
                     .with_style(Attr::ForegroundColor(color::RED)),
@@ -306,7 +309,6 @@ fn print_summary(results: &[TestResult]) {
         } else {
             other_failed += 1;
         }
-        
     }
 
     let mut summary = Table::new();

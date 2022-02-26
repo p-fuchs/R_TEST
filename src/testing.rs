@@ -9,7 +9,9 @@ use std::process::{Command, Stdio};
 #[derive(Debug)]
 enum DiffResult {
     Ok,
-    Difference(String),
+    DifferenceNotSpecified(String),
+    DifferenceStderr(String),
+    DifferenceStdout(String),
     Trouble(String),
     InnerProblem(String)
 }
@@ -34,7 +36,8 @@ impl TestFail {
             TestFail::ProgramExitCode(err) => err,
             TestFail::Diff(diff_error) => {
                 match diff_error {
-                    DiffResult::Difference(err) => err,
+                    DiffResult::DifferenceStderr(err) => err,
+                    DiffResult::DifferenceStdout(err) => err,
                     DiffResult::InnerProblem(err) => err,
                     DiffResult::Trouble(err) => err,
                     _ => "UNDEFINED BEHAVIOUR OF GET_PROBLEM FUNCTION"
@@ -278,7 +281,7 @@ impl TestResult {
                     }
                     1 => {
                         let diff_result = String::from_utf8_lossy(&output.stdout).to_string();
-                        DiffResult::Difference(diff_result)
+                        DiffResult::DifferenceNotSpecified(diff_result)
                     }
                     _ => {
                         let diff_error = String::from_utf8_lossy(&output.stderr).to_string();
@@ -345,9 +348,12 @@ impl TestResult {
 
         match stdout_result {
             DiffResult::Ok => {},
-            other => {
-                self.failed_cause = TestFail::Diff(other);
+            DiffResult::DifferenceNotSpecified(error) => {
+                self.failed_cause = TestFail::Diff(DiffResult::DifferenceStdout(error));
                 return false;
+            }
+            _ => {
+                panic!("UNABLE ARM OF RUN DIFF REACHED!! (STDOUT)");
             }
         }
 
@@ -356,9 +362,12 @@ impl TestResult {
 
             match stderr_result {
                 DiffResult::Ok => true,
-                other => {
-                    self.failed_cause = TestFail::Diff(other);
+                DiffResult::DifferenceNotSpecified(error) => {
+                    self.failed_cause = TestFail::Diff(DiffResult::DifferenceStderr(error));
                     false
+                }
+                _ => {
+                    panic!("UNABLE ARM OF RUN DIFF REACHED!! (STDERR)");
                 }
             }
         } else {
@@ -377,9 +386,15 @@ impl TestResult {
             },
             TestFail::Diff(diff_error) => {
                 match diff_error {
-                    DiffResult::Difference(_) => {
-                        "Diff ERROR: Difference".to_string()
+                    DiffResult::DifferenceNotSpecified(_) => {
+                        "Diff ERROR: Difference (not specified)".to_string()
                     },
+                    DiffResult::DifferenceStderr(_) => {
+                        "Diff ERROR: Difference (stderr)".to_string()
+                    },
+                    DiffResult::DifferenceStdout(_) => {
+                        "Diff ERROR: Difference (stdout)".to_string()
+                    }
                     DiffResult::InnerProblem(_) => {
                         "Diff ERROR: InnerProblem".to_string()
                     }
