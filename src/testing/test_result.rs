@@ -13,6 +13,26 @@ pub struct TestResult {
     failed_cause: TestFail
 }
 
+impl PartialEq for TestResult {
+    fn eq(&self, other: &Self) -> bool {
+        self.test_path == other.test_path
+    }
+}
+
+impl Eq for TestResult {}
+
+impl PartialOrd for TestResult {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.test_path.partial_cmp(&other.test_path)
+    }
+}
+
+impl Ord for TestResult {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.test_path.cmp(&other.test_path)
+    }
+}
+
 impl TestResult {
 
     /**

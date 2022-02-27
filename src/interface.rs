@@ -206,7 +206,8 @@ pub fn start_program(settings: &mut Options) {
 
     match choice {
         1 => {
-            let results = testing::run_testing(settings);
+            let mut results = testing::run_testing(settings);
+            results.sort();
             print_results(&results);
         }
         3 => {
@@ -253,7 +254,7 @@ fn print_table(results: &[TestResult]){
 
     show_result.add_row(row!["ID", "NAME", "TIME", "PASSED", "PROBLEM"]);
     for (index, result) in results.iter().enumerate() {
-        let id = index.to_string();
+        let id = (index + 1).to_string();
         let name = result.get_name();
         if result.passed() {
             let mut time = result.get_time().to_string();
