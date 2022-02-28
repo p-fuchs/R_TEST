@@ -329,8 +329,9 @@ impl TestResult {
                 self.failed_cause = TestFail::Diff(DiffResult::DifferenceStdout(error));
                 return false;
             }
-            _ => {
-                panic!("UNABLE ARM OF RUN DIFF REACHED!! (STDOUT)");
+            other => {
+                self.failed_cause = TestFail::Diff(other);
+                return false;
             }
         }
 
