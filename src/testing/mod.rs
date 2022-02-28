@@ -12,10 +12,16 @@ Checks wheter a given file is a file containing input
 */
 fn is_infile(to_test: &DirEntry) -> bool {
     let file_test_path = to_test.path();
-    let extension = file_test_path.extension()
-        .unwrap_or_else(|| panic!("ERROR: Reading extension of {:?} FAILED.", &file_test_path));
+    let extension = file_test_path.extension();
 
-    extension == "in"
+    match extension {
+        Some(extension) => {
+            extension == "in"
+        }
+        None => {
+            false
+        }
+    }
 }
 
 /// Main function to run tests. Produces a vector of results.
