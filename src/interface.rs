@@ -206,8 +206,7 @@ pub fn start_program(settings: &mut Options) {
 
     match choice {
         1 => {
-            let mut results = testing::run_testing(settings);
-            results.sort();
+            let results = testing::run_testing(settings);
             print_results(&results);
         }
         3 => {

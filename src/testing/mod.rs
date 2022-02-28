@@ -21,6 +21,7 @@ fn is_infile(to_test: &DirEntry) -> bool {
 /// Main function to run tests. Produces a vector of results.
 pub fn run_testing(settings: &Options) -> Vec<TestResult> {
     let mut list = TestResult::load(settings.get_test_path());
+    list.sort();
     
     if settings.get_valgrind_activity() {
         list.par_iter_mut()

@@ -213,7 +213,7 @@ impl TestResult {
             }
             Ok(output) => {
                 let status = output.status.code().expect("ERROR: Reading exitcode of valgrind FAILED.");
-                println!("STATUS VAL {}", status);
+                //println!("STATUS VAL {} INDEX {}", status, index);
                 match status {
                     0 => {
                         let stdout_result = String::from_utf8_lossy(&output.stdout).to_string();
