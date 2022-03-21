@@ -193,7 +193,7 @@ impl TestResult {
 
         let mut process = Command::new("valgrind")
             .arg("--leak-check=full")
-            .arg("--error-exitcode=1")
+            .arg("--error-exitcode=-5")
             .arg("-q")
             .arg(program)
             .stdin(Stdio::piped())
@@ -212,21 +212,21 @@ impl TestResult {
                 false
             }
             Ok(output) => {
-                let status = output.status.code().expect("ERROR: Reading exitcode of valgrind FAILED.");
+                let status = output.status.code().unwrap_or_else(|| panic!("ERROR: Reading exitcode of valgrind FAILED! FILE {}", self.get_name()));
                 //println!("STATUS VAL {} INDEX {}", status, index);
                 match status {
-                    0 => {
+                    -5 => {
+                        let failed_result = String::from_utf8_lossy(&output.stderr).to_string();
+                        println!("VAL FAIL {}", &failed_result);
+                        self.failed_cause = TestFail::Valgrind(failed_result);
+                        false
+                    }
+                    _ => {
                         let stdout_result = String::from_utf8_lossy(&output.stdout).to_string();
                         let stderr_result = String::from_utf8_lossy(&output.stderr).to_string();
                         write!(&mut output_file, "{}", stdout_result).unwrap();
                         write!(&mut error_file, "{}", stderr_result).unwrap();
                         true
-                    }
-                    _ => {
-                        let failed_result = String::from_utf8_lossy(&output.stderr).to_string();
-                        println!("VAL FAIL {}", &failed_result);
-                        self.failed_cause = TestFail::Valgrind(failed_result);
-                        false
                     }
                 }
             }
@@ -275,6 +275,7 @@ impl TestResult {
     pub(super) fn test_with_valgrind(&mut self, program_path: &str, index: usize, use_stderr: bool) {
         use std::time::SystemTime;
         let beggining = SystemTime::now();
+        //println!("THREAD {} RUN", self.get_name());
         if self.run_valgrind(index, program_path) && self.run_diff(index, use_stderr){
             self.passed = true;
         }
@@ -296,6 +297,7 @@ impl TestResult {
     pub(super) fn test_no_valgrind(&mut self, program_path: &str, index: usize, use_stderr: bool) {
         use std::time::SystemTime;
         let beggining = SystemTime::now();
+        //println!("THREAD {} RUN", self.get_name());
 
         if self.run_program(index, program_path) && self.run_diff(index, use_stderr) {
             self.passed = true;
