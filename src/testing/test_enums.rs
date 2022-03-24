@@ -14,7 +14,8 @@ pub enum TestFail {
     Valgrind(String),
     Diff(DiffResult),
     InnerProblem(String),
-    ProgramExitCode(String)
+    ProgramExitCode(),
+    ValgrindExitCode()
 }
 
 impl TestFail {
@@ -26,7 +27,8 @@ impl TestFail {
         match self {
             TestFail::Valgrind(err) => err,
             TestFail::InnerProblem(err) => err,
-            TestFail::ProgramExitCode(err) => err,
+            TestFail::ProgramExitCode() => "Probably caused by unexpected exit of tested program.",
+            TestFail::ValgrindExitCode() => "Probably caused by unexpected exit of valgrind program.",
             TestFail::Diff(diff_error) => {
                 match diff_error {
                     DiffResult::DifferenceStderr(err) => err,

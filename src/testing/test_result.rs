@@ -152,27 +152,28 @@ impl TestResult {
             Err(e) => {
                 self.failed_cause = TestFail::InnerProblem(e.to_string());
                 false
-            },
+            }
             Ok(output) => {
-                let status = output.status
-                    .code()
-                    .expect("ERROR: Reading output status of Program FAILED.");
-                
-                match status {
-                    0 => {
-                        let stdout_result = String::from_utf8_lossy(&output.stdout).to_string();
-                        let stderr_result = String::from_utf8_lossy(&output.stderr).to_string();
-                        write!(&mut output_file, "{}", stdout_result).unwrap();
-                        write!(&mut error_file, "{}", stderr_result).unwrap();
-                        true
-                    }
-                    other => {
-                        self.failed_cause = TestFail::ProgramExitCode(other.to_string());
-                        let stdout_result = String::from_utf8_lossy(&output.stdout).to_string();
-                        let stderr_result = String::from_utf8_lossy(&output.stderr).to_string();
-                        write!(&mut output_file, "{}", stdout_result).unwrap();
-                        write!(&mut error_file, "{}", stderr_result).unwrap();
-                        true
+                let status = output.status.code();
+
+                if status.is_none() {
+                    self.failed_cause = TestFail::ProgramExitCode();
+                    false
+                } else {
+                    match status.unwrap() {
+                        -5 => {
+                            let failed_result = String::from_utf8_lossy(&output.stderr).to_string();
+                            self.failed_cause = TestFail::Valgrind(failed_result);
+                            false
+                        }
+
+                        _ => {
+                            let stdout_result = String::from_utf8_lossy(&output.stdout).to_string();
+                            let stderr_result = String::from_utf8_lossy(&output.stderr).to_string();
+                            write!(&mut output_file, "{}", stdout_result).unwrap();
+                            write!(&mut error_file, "{}", stderr_result).unwrap();
+                            true
+                        }
                     }
                 }
             }
@@ -212,21 +213,26 @@ impl TestResult {
                 false
             }
             Ok(output) => {
-                let status = output.status.code().unwrap_or_else(|| panic!("ERROR: Reading exitcode of valgrind FAILED! FILE {}", self.get_name()));
-                //println!("STATUS VAL {} INDEX {}", status, index);
-                match status {
-                    -5 => {
-                        let failed_result = String::from_utf8_lossy(&output.stderr).to_string();
-                        println!("VAL FAIL {}", &failed_result);
-                        self.failed_cause = TestFail::Valgrind(failed_result);
-                        false
-                    }
-                    _ => {
-                        let stdout_result = String::from_utf8_lossy(&output.stdout).to_string();
-                        let stderr_result = String::from_utf8_lossy(&output.stderr).to_string();
-                        write!(&mut output_file, "{}", stdout_result).unwrap();
-                        write!(&mut error_file, "{}", stderr_result).unwrap();
-                        true
+                let status = output.status.code();
+
+                if status.is_none() {
+                    self.failed_cause = TestFail::ValgrindExitCode();
+                    false
+                } else {
+                    match status.unwrap() {
+                        -5 => {
+                            let failed_result = String::from_utf8_lossy(&output.stderr).to_string();
+                            self.failed_cause = TestFail::Valgrind(failed_result);
+                            false
+                        }
+
+                        _ => {
+                            let stdout_result = String::from_utf8_lossy(&output.stdout).to_string();
+                            let stderr_result = String::from_utf8_lossy(&output.stderr).to_string();
+                            write!(&mut output_file, "{}", stdout_result).unwrap();
+                            write!(&mut error_file, "{}", stderr_result).unwrap();
+                            true
+                        }
                     }
                 }
             }
@@ -358,9 +364,12 @@ impl TestResult {
     /// Returns 'title' of problem which has occured while testing
     pub fn get_problem_description(&self) -> String {
         match &self.failed_cause {
-            TestFail::ProgramExitCode(_) => {
-                "Program EXITCODE".to_string()
+            TestFail::ProgramExitCode() => {
+                "SYSTEM: Program EXITCODE read failed!".to_string()
             },
+            TestFail::ValgrindExitCode() => {
+                "SYSTEM: Valgrind EXITCODE read failed!".to_string()
+            }
             TestFail::Valgrind(_) => {
                 "Valgrind ERROR".to_string()
             },
