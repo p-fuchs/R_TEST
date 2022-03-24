@@ -251,10 +251,11 @@ main directory
 fn print_table(results: &[TestResult]){
     let mut show_result = Table::new();
 
-    show_result.add_row(row!["ID", "NAME", "TIME", "PASSED", "PROBLEM"]);
+    show_result.add_row(row!["ID", "NAME", "TIME", "PASSED", "PROBLEM / EXITCODE"]);
     for (index, result) in results.iter().enumerate() {
         let id = (index + 1).to_string();
         let name = result.get_name();
+        let code = format!("Program returned | {} | as EXITCODE.", result.get_exit_code());
         if result.passed() {
             let mut time = result.get_time().to_string();
             time.push_str(" s");
@@ -266,7 +267,7 @@ fn print_table(results: &[TestResult]){
                     .with_style(Attr::ForegroundColor(color::YELLOW)),
                 Cell::new("TRUE")
                     .with_style(Attr::ForegroundColor(color::GREEN)),
-                Cell::new("-")
+                Cell::new(&code)
             ]));
         } else {
             let mut description = result.get_problem_description();

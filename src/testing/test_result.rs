@@ -10,7 +10,8 @@ pub struct TestResult {
     test_path: String,
     passed: bool,
     time: f32,
-    failed_cause: TestFail
+    failed_cause: TestFail,
+    return_code: i32
 }
 
 impl PartialEq for TestResult {
@@ -43,8 +44,13 @@ impl TestResult {
             test_path: path.to_string(),
             passed: false,
             time: 0.0,
-            failed_cause: TestFail::InnerProblem("".to_string())
+            failed_cause: TestFail::InnerProblem("".to_string()),
+            return_code: 5
         }
+    }
+
+    pub fn get_exit_code(&self) -> i32 {
+        self.return_code
     }
 
     /// Returns wheter there occured valgrind error while testing (true - occured).
@@ -160,21 +166,13 @@ impl TestResult {
                     self.failed_cause = TestFail::ProgramExitCode();
                     false
                 } else {
-                    match status.unwrap() {
-                        -5 => {
-                            let failed_result = String::from_utf8_lossy(&output.stderr).to_string();
-                            self.failed_cause = TestFail::Valgrind(failed_result);
-                            false
-                        }
-
-                        _ => {
-                            let stdout_result = String::from_utf8_lossy(&output.stdout).to_string();
-                            let stderr_result = String::from_utf8_lossy(&output.stderr).to_string();
-                            write!(&mut output_file, "{}", stdout_result).unwrap();
-                            write!(&mut error_file, "{}", stderr_result).unwrap();
-                            true
-                        }
-                    }
+                    let exit_code = status.unwrap();
+                    let stdout_result = String::from_utf8_lossy(&output.stdout).to_string();
+                    let stderr_result = String::from_utf8_lossy(&output.stderr).to_string();
+                    write!(&mut output_file, "{}", stdout_result).unwrap();
+                    write!(&mut error_file, "{}", stderr_result).unwrap();
+                    self.return_code = exit_code;
+                    true
                 }
             }
         }
@@ -194,7 +192,7 @@ impl TestResult {
 
         let mut process = Command::new("valgrind")
             .arg("--leak-check=full")
-            .arg("--error-exitcode=-5")
+            .arg("--error-exitcode=-573")
             .arg("-q")
             .arg(program)
             .stdin(Stdio::piped())
@@ -220,17 +218,18 @@ impl TestResult {
                     false
                 } else {
                     match status.unwrap() {
-                        -5 => {
+                        -573 => {
                             let failed_result = String::from_utf8_lossy(&output.stderr).to_string();
                             self.failed_cause = TestFail::Valgrind(failed_result);
                             false
                         }
 
-                        _ => {
+                        return_code => {
                             let stdout_result = String::from_utf8_lossy(&output.stdout).to_string();
                             let stderr_result = String::from_utf8_lossy(&output.stderr).to_string();
                             write!(&mut output_file, "{}", stdout_result).unwrap();
                             write!(&mut error_file, "{}", stderr_result).unwrap();
+                            self.return_code = return_code;
                             true
                         }
                     }
@@ -417,7 +416,8 @@ mod tests {
             test_path: "/usr/bin/a/b/c/def.in".to_string(),
             passed: false,
             time: 0.0,
-            failed_cause: TestFail::InnerProblem("".to_string())
+            failed_cause: TestFail::InnerProblem("".to_string()),
+            return_code: 1
         };
         
         assert!(ts.get_stdout_file() == "/usr/bin/a/b/c/def.out");
@@ -429,7 +429,8 @@ mod tests {
             test_path: "/usr/bin/a/b/c/def.in".to_string(),
             passed: false,
             time: 0.0,
-            failed_cause: TestFail::InnerProblem("".to_string())
+            failed_cause: TestFail::InnerProblem("".to_string()),
+            return_code: 1
         };
         
         assert!(ts.get_stderr_file() == "/usr/bin/a/b/c/def.err");
@@ -441,7 +442,8 @@ mod tests {
             test_path: "/usr/bin/a/b/c/def.in".to_string(),
             passed: false,
             time: 0.0,
-            failed_cause: TestFail::InnerProblem("".to_string())
+            failed_cause: TestFail::InnerProblem("".to_string()),
+            return_code: 1
         };
 
         assert!(ts.get_name() == "def.in");
