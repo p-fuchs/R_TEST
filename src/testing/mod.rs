@@ -4,7 +4,7 @@ pub mod test_enums;
 pub use test_result::TestResult;
 use std::fs::DirEntry;
 use rayon::prelude::*;
-use indicatif::{ProgressBar, ParallelProgressIterator, ProgressStyle};
+use indicatif::ParallelProgressIterator;
 
 use crate::settings::Options;
 
