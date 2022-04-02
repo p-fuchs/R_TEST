@@ -193,6 +193,8 @@ impl TestResult {
         let mut process = Command::new("valgrind")
             .arg("--leak-check=full")
             .arg("--error-exitcode=-573")
+            .arg("--show-leak-kinds=all")
+            .arg("--errors-for-leak-kinds=all")
             .arg("-q")
             .arg(program)
             .stdin(Stdio::piped())
