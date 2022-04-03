@@ -7,7 +7,8 @@ pub struct Options {
     test_root_directory: String,
     program_executable_path: String,
     is_valgrind_active: bool,
-    use_stderr_tests: bool
+    use_stderr_tests: bool,
+    language: String
 }
 
 impl Default for Options {
@@ -19,7 +20,8 @@ impl Default for Options {
             test_root_directory: "testy/".to_string(),
             program_executable_path: "PLEASE, SET!".to_string(),
             is_valgrind_active: true,
-            use_stderr_tests: false
+            use_stderr_tests: false,
+            language: "EN_en".to_string()
         }
     }
 }
@@ -28,6 +30,11 @@ impl Options {
     /// Return absolute path to folder with tests
     pub fn get_test_path(&self) -> &str {
         &self.test_root_directory
+    }
+
+    /// Return actual language
+    pub fn get_language(&self) -> &str {
+        &self.language
     }
 
     /// Returns wheater to use valgrind or not (true - use)
@@ -72,6 +79,10 @@ impl Options {
     /// Sets wheter to use stderr tests in testing process (true - use)
     pub fn set_stderr_usage(&mut self, option: bool) {
         self.use_stderr_tests = option;
+    }
+
+    pub fn set_language(&mut self, lang: &str) {
+        self.language = lang.to_string();
     }
 
     /// Returns &str which representes program executable absolute path

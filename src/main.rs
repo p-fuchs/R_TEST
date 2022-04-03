@@ -6,9 +6,13 @@
 mod settings;
 mod interface;
 mod testing;
+mod language;
+
+use language::language_dictionary::LangDict;
 
 fn main() {
     let mut configuration = settings::Options::new();
-    interface::start_program(&mut configuration);
+    let language = LangDict::new(configuration.get_language());
+    interface::start_program(&mut configuration, &language);
     configuration.save();
 }

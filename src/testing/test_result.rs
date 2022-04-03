@@ -162,17 +162,16 @@ impl TestResult {
             Ok(output) => {
                 let status = output.status.code();
 
-                if status.is_none() {
-                    self.failed_cause = TestFail::ProgramExitCode();
-                    false
-                } else {
-                    let exit_code = status.unwrap();
+                if let Some(exit_code) = status {
                     let stdout_result = String::from_utf8_lossy(&output.stdout).to_string();
                     let stderr_result = String::from_utf8_lossy(&output.stderr).to_string();
                     write!(&mut output_file, "{}", stdout_result).unwrap();
                     write!(&mut error_file, "{}", stderr_result).unwrap();
                     self.return_code = exit_code;
                     true
+                } else {
+                    self.failed_cause = TestFail::ProgramExitCode();
+                    false
                 }
             }
         }
@@ -215,11 +214,8 @@ impl TestResult {
             Ok(output) => {
                 let status = output.status.code();
 
-                if status.is_none() {
-                    self.failed_cause = TestFail::ValgrindExitCode();
-                    false
-                } else {
-                    match status.unwrap() {
+                if let Some(exit_code) = status {
+                    match exit_code {
                         -573 => {
                             let failed_result = String::from_utf8_lossy(&output.stderr).to_string();
                             self.failed_cause = TestFail::Valgrind(failed_result);
@@ -235,6 +231,9 @@ impl TestResult {
                             true
                         }
                     }
+                } else {
+                    self.failed_cause = TestFail::ValgrindExitCode();
+                    false
                 }
             }
         }
