@@ -1,6 +1,6 @@
+use serde_json;
 use std::collections::HashMap;
 use std::fs;
-use serde_json;
 
 const LANG_DIR: &str = "./lang/";
 
@@ -47,14 +47,14 @@ const ENG_LANG: &str = r#"{
   }"#;
 
 pub struct LangDict {
-    database: HashMap<String, String>
+    database: HashMap<String, String>,
 }
 
 impl super::LiteralGenerator for LangDict {
     fn get_literal<'input>(&'input self, identificator: &str) -> &'input str {
         match self.database.get(identificator) {
             None => "NO TRANSLATION YET.",
-            Some(string) => string
+            Some(string) => string,
         }
     }
 
@@ -69,38 +69,37 @@ impl LangDict {
         path.push_str(LANG_DIR);
         path.push_str(language_id);
         path.push_str(".lang");
-        
+
         let content = match fs::read_to_string(&path) {
             Err(_) => {
                 eprintln!("ERROR: Translation file not found. ID: {}", language_id);
                 return LangDict::handle_wrong(language_id);
             }
-            Ok(s) => s
+            Ok(s) => s,
         };
-        
+
         let map: HashMap<String, String> = match serde_json::from_str(&content) {
             Err(_) => {
                 eprintln!("ERROR: Translation file is wrong. ID: {}", language_id);
                 return LangDict::handle_wrong(language_id);
             }
-            Ok(map) => map
+            Ok(map) => map,
         };
-        
+
         LangDict { database: map }
     }
 
     fn handle_wrong(language_id: &str) -> Self {
         let res = LangDict::default();
         res.serialize(language_id);
-        
+
         res
     }
 
     pub fn serialize(&self, language_id: &str) {
         let path = format!("{}{}.lang", LANG_DIR, language_id);
-        let content = serde_json::to_string_pretty(&self.database)
-            .unwrap();
-        
+        let content = serde_json::to_string_pretty(&self.database).unwrap();
+
         println!("PATH OF SERIALIZATION {}", path);
         let _ = fs::write(path, content);
     }

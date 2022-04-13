@@ -2,11 +2,12 @@
 //! It needs a compiled version of program to test and absolute path to it and folder with tests.
 //! Testfolder should be a directory with .in, .out and .err files with matching names.
 
-#[macro_use] extern crate prettytable;
-mod settings;
+#[macro_use]
+extern crate prettytable;
 mod interface;
-mod testing;
 mod language;
+mod settings;
+mod testing;
 
 use language::language_dictionary::LangDict;
 

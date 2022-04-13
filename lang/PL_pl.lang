@@ -6,6 +6,7 @@
   "VALGRIND_ACTIVITY":      "3)    Czy używać valgrinda:",
   "STDERR_ACTIVITY":        "4)     Czy testować stderr:",
   "LANGUAGE_OPTION":        "5)                   Język:",
+  "PROGRAM_MODE":           "6)       Tryb z kompilacją:",
   "WARNING_ABSOLUTE_PATH":  "Uwaga 1: Wpisywane ścieżki powinny być w formacie bezwzględnym!",
   "WARNING_LANGUAGE":       "Uwaga 2: Język zostanie zmieniony po restarcie programu.",
   "CHOOSE_OPTION_RETURN6":  "Wybierz opcję (6 powoduję wyjście z menu):",

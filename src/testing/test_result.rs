@@ -1,9 +1,9 @@
-use std::process::{Command, Stdio};
 use std::fs::{self, File};
-use std::io::{Write, self};
+use std::io::{self, Write};
+use std::process::{Command, Stdio};
 
-use super::test_enums::{TestFail, DiffResult};
-use super::is_infile;
+use super::test_enums::{DiffResult, TestFail};
+use super::{is_cfile, is_infile};
 /// Structure to manage testing
 #[derive(Debug)]
 pub struct TestResult {
@@ -11,7 +11,8 @@ pub struct TestResult {
     passed: bool,
     time: f32,
     failed_cause: TestFail,
-    return_code: i32
+    return_code: i32,
+    compilation_warnings: Option<String>,
 }
 
 impl PartialEq for TestResult {
@@ -35,7 +36,6 @@ impl Ord for TestResult {
 }
 
 impl TestResult {
-
     /**
     Creates new structure with given absolute path of test
     */
@@ -45,7 +45,8 @@ impl TestResult {
             passed: false,
             time: 0.0,
             failed_cause: TestFail::InnerProblem("".to_string()),
-            return_code: 5
+            return_code: 5,
+            compilation_warnings: None,
         }
     }
 
@@ -70,13 +71,29 @@ impl TestResult {
     in given absolue path.
     */
     pub(super) fn load(path: &str) -> Vec<TestResult> {
-        let source = fs::read_dir(path)
-            .expect("ERROR: Opening directory with tests FAILED.");
+        let source = fs::read_dir(path).expect("ERROR: Opening directory with tests FAILED.");
 
         let mut result = Vec::new();
         for file in source {
             let entry = file.expect("ERROR: Reading tests FAILED.");
             if is_infile(&entry) {
+                result.push(TestResult::new(entry.path().to_str().unwrap()));
+            }
+        }
+        result
+    }
+
+    /**
+    Creates a vector of TestResults from every single file with .c extension
+    in given absolue path.
+    */
+    pub(super) fn load_c(path: &str) -> Vec<TestResult> {
+        let source = fs::read_dir(path).expect("ERROR: Opening directory with tests FAILED.");
+
+        let mut result = Vec::new();
+        for file in source {
+            let entry = file.expect("ERROR: Reading tests FAILED.");
+            if is_cfile(&entry) {
                 result.push(TestResult::new(entry.path().to_str().unwrap()));
             }
         }
@@ -149,7 +166,7 @@ impl TestResult {
             .stderr(Stdio::piped())
             .spawn()
             .expect("ERROR: Spawning child process of Program FAILED.");
-        
+
         io::copy(&mut input_file, process.stdin.as_mut().unwrap()).unwrap();
 
         let process = process.wait_with_output();
@@ -175,7 +192,57 @@ impl TestResult {
                 }
             }
         }
+    }
 
+    /**
+    Compiles a program to be tested. Program_path should be precompiled .o library.
+    */
+    fn compile_program(&mut self, program_path: &str, index: usize) -> bool {
+        let compiled_program = format!("rtest_compilation{}", index);
+
+        let process = Command::new("gcc")
+            .arg("-O2")
+            .arg("-Wall")
+            .arg("-Wextra")
+            .arg("-Wno-implicit-fallthrough")
+            .arg(&self.test_path)
+            .arg(program_path)
+            .arg("-o")
+            .arg(compiled_program)
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("ERROR: Spawning child process of GCC FAILED.");
+
+        let process = process.wait_with_output();
+
+        match process {
+            Err(e) => {
+                self.failed_cause = TestFail::InnerProblem(e.to_string());
+                false
+            }
+            Ok(output) => {
+                let status = output.status.code();
+
+                if let Some(exit_code) = status {
+                    match exit_code {
+                        1 => {
+                            let failed_result = String::from_utf8_lossy(&output.stderr).to_string();
+                            self.failed_cause = TestFail::Compilation(failed_result);
+                            false
+                        }
+                        _ => {
+                            let compilation_warning =
+                                String::from_utf8_lossy(&output.stderr).to_string();
+                            self.compilation_warnings = Some(compilation_warning);
+                            true
+                        }
+                    }
+                } else {
+                    self.failed_cause = TestFail::CompilationExitCode;
+                    false
+                }
+            }
+        }
     }
 
     /**
@@ -201,9 +268,8 @@ impl TestResult {
             .stderr(Stdio::piped())
             .spawn()
             .expect("ERROR: Spawning child process of Valgrind FAILED.");
-        
-        io::copy(&mut input_file, process.stdin.as_mut().unwrap()).unwrap();
 
+        io::copy(&mut input_file, process.stdin.as_mut().unwrap()).unwrap();
         let process = process.wait_with_output();
 
         match process {
@@ -228,6 +294,7 @@ impl TestResult {
                             write!(&mut output_file, "{}", stdout_result).unwrap();
                             write!(&mut error_file, "{}", stderr_result).unwrap();
                             self.return_code = return_code;
+                            println!("OUTPUT FILE {}", stdout_result);
                             true
                         }
                     }
@@ -251,17 +318,16 @@ impl TestResult {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output();
-        
+
         match process {
-            Err(e) => {
-                DiffResult::InnerProblem(e.to_string())
-            }
+            Err(e) => DiffResult::InnerProblem(e.to_string()),
             Ok(output) => {
-                let status = output.status.code().expect("ERROR: Reading exitcode of diff FAILED.");
+                let status = output
+                    .status
+                    .code()
+                    .expect("ERROR: Reading exitcode of diff FAILED.");
                 match status {
-                    0 => {
-                        DiffResult::Ok
-                    }
+                    0 => DiffResult::Ok,
                     1 => {
                         let diff_result = String::from_utf8_lossy(&output.stdout).to_string();
                         DiffResult::DifferenceNotSpecified(diff_result)
@@ -276,13 +342,88 @@ impl TestResult {
     }
 
     /**
+    Conducts a test process with compilation and valgrind usage.
+    */
+    pub(super) fn test_compiled_with_valgrind(
+        &mut self,
+        program_path: &str,
+        index: usize,
+        use_stderr: bool,
+    ) {
+        use std::time::SystemTime;
+        let beggining = SystemTime::now();
+
+        if !self.compile_program(program_path, index) {
+            self.passed = false;
+            return;
+        }
+
+        let compiled_path = format!("./rtest_compilation{}", index);
+        if self.run_valgrind(index, &compiled_path) && self.run_diff(index, use_stderr) {
+            self.passed = true;
+        }
+
+        let stdout = format!("rtest_stdout{}", index);
+        let stderr = format!("rtest_stderr{}", index);
+        let compiled = format!("rtest_compilation{}", index);
+        let _ = fs::remove_file(stdout);
+        let _ = fs::remove_file(stderr);
+        let _ = fs::remove_file(compiled);
+
+        self.time = SystemTime::now()
+            .duration_since(beggining)
+            .unwrap_or_else(|_| panic!("ERROR: Time_calculation of {:?} FAILED.", self.test_path))
+            .as_secs_f32();
+    }
+
+    /**
+    Conducts a test process with compilation and without valgrind usage.
+    */
+    pub(super) fn test_compiled_no_valgrind(
+        &mut self,
+        program_path: &str,
+        index: usize,
+        use_stderr: bool,
+    ) {
+        use std::time::SystemTime;
+        let beggining = SystemTime::now();
+
+        if !self.compile_program(program_path, index) {
+            self.passed = false;
+            return;
+        }
+
+        let compiled_path = format!("./rtest_compiled{}", index);
+        if self.run_program(index, &compiled_path) && self.run_diff(index, use_stderr) {
+            self.passed = true;
+        }
+
+        let stdout = format!("rtest_stdout{}", index);
+        let stderr = format!("rtest_stderr{}", index);
+        let compiled = format!("rtest_compilation{}", index);
+        let _ = fs::remove_file(stdout);
+        let _ = fs::remove_file(stderr);
+        let _ = fs::remove_file(compiled);
+
+        self.time = SystemTime::now()
+            .duration_since(beggining)
+            .unwrap_or_else(|_| panic!("ERROR: Time_calculation of {:?} FAILED.", self.test_path))
+            .as_secs_f32();
+    }
+
+    /**
     Conducts a test process with using valgrind
     */
-    pub(super) fn test_with_valgrind(&mut self, program_path: &str, index: usize, use_stderr: bool) {
+    pub(super) fn test_with_valgrind(
+        &mut self,
+        program_path: &str,
+        index: usize,
+        use_stderr: bool,
+    ) {
         use std::time::SystemTime;
         let beggining = SystemTime::now();
         //println!("THREAD {} RUN", self.get_name());
-        if self.run_valgrind(index, program_path) && self.run_diff(index, use_stderr){
+        if self.run_valgrind(index, program_path) && self.run_diff(index, use_stderr) {
             self.passed = true;
         }
 
@@ -328,11 +469,11 @@ impl TestResult {
         let stderr_input = format!("rtest_stderr{}", index);
         let stdout_output = self.get_stdout_file();
         let stderr_output = self.get_stderr_file();
-        
+
         let stdout_result = TestResult::diff_files(&stdout_input, &stdout_output);
 
         match stdout_result {
-            DiffResult::Ok => {},
+            DiffResult::Ok => {}
             DiffResult::DifferenceNotSpecified(error) => {
                 self.failed_cause = TestFail::Diff(DiffResult::DifferenceStdout(error));
                 return false;
@@ -364,40 +505,22 @@ impl TestResult {
     /// Returns 'title' of problem which has occured while testing
     pub fn get_problem_description(&self) -> String {
         match &self.failed_cause {
-            TestFail::ProgramExitCode() => {
-                "SYSTEM: Program EXITCODE read failed!".to_string()
-            },
-            TestFail::ValgrindExitCode() => {
-                "SYSTEM: Valgrind EXITCODE read failed!".to_string()
-            }
-            TestFail::Valgrind(_) => {
-                "Valgrind ERROR".to_string()
-            },
-            TestFail::Diff(diff_error) => {
-                match diff_error {
-                    DiffResult::DifferenceNotSpecified(_) => {
-                        "Diff ERROR: Difference (not specified)".to_string()
-                    },
-                    DiffResult::DifferenceStderr(_) => {
-                        "Diff ERROR: Difference (stderr)".to_string()
-                    },
-                    DiffResult::DifferenceStdout(_) => {
-                        "Diff ERROR: Difference (stdout)".to_string()
-                    }
-                    DiffResult::InnerProblem(_) => {
-                        "Diff ERROR: InnerProblem".to_string()
-                    }
-                    DiffResult::Trouble(_) => {
-                        "Diff ERROR: Trouble".to_string()
-                    }
-                    _ => {
-                        "PROGRAM UNDEFINED DIFF ERROR".to_string()
-                    }
+            TestFail::ProgramExitCode() => "SYSTEM: Program EXITCODE read failed!".to_string(),
+            TestFail::ValgrindExitCode() => "SYSTEM: Valgrind EXITCODE read failed!".to_string(),
+            TestFail::CompilationExitCode => "SYSTEM: Gcc EXITCODE read failed!".to_string(),
+            TestFail::Valgrind(_) => "Valgrind ERROR".to_string(),
+            TestFail::Compilation(_) => "Compilation ERROR".to_string(),
+            TestFail::Diff(diff_error) => match diff_error {
+                DiffResult::DifferenceNotSpecified(_) => {
+                    "Diff ERROR: Difference (not specified)".to_string()
                 }
+                DiffResult::DifferenceStderr(_) => "Diff ERROR: Difference (stderr)".to_string(),
+                DiffResult::DifferenceStdout(_) => "Diff ERROR: Difference (stdout)".to_string(),
+                DiffResult::InnerProblem(_) => "Diff ERROR: InnerProblem".to_string(),
+                DiffResult::Trouble(_) => "Diff ERROR: Trouble".to_string(),
+                _ => "PROGRAM UNDEFINED DIFF ERROR".to_string(),
             },
-            TestFail::InnerProblem(_) => {
-                "PROGRAM INNER PROBLEM".to_string()
-            }
+            TestFail::InnerProblem(_) => "PROGRAM INNER PROBLEM".to_string(),
         }
     }
 
@@ -410,7 +533,7 @@ impl TestResult {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn get_stdout_test() {
         let ts = TestResult {
@@ -418,9 +541,10 @@ mod tests {
             passed: false,
             time: 0.0,
             failed_cause: TestFail::InnerProblem("".to_string()),
-            return_code: 1
+            return_code: 1,
+            compilation_warnings: None,
         };
-        
+
         assert!(ts.get_stdout_file() == "/usr/bin/a/b/c/def.out");
     }
 
@@ -431,9 +555,10 @@ mod tests {
             passed: false,
             time: 0.0,
             failed_cause: TestFail::InnerProblem("".to_string()),
-            return_code: 1
+            return_code: 1,
+            compilation_warnings: None,
         };
-        
+
         assert!(ts.get_stderr_file() == "/usr/bin/a/b/c/def.err");
     }
 
@@ -444,7 +569,8 @@ mod tests {
             passed: false,
             time: 0.0,
             failed_cause: TestFail::InnerProblem("".to_string()),
-            return_code: 1
+            return_code: 1,
+            compilation_warnings: None,
         };
 
         assert!(ts.get_name() == "def.in");

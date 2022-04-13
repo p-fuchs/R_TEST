@@ -1,5 +1,5 @@
-use std::path;
 use std::fs;
+use std::path;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 /// Structure to manage program configuration
@@ -8,7 +8,8 @@ pub struct Options {
     program_executable_path: String,
     is_valgrind_active: bool,
     use_stderr_tests: bool,
-    language: String
+    language: String,
+    compiled_test_version: bool,
 }
 
 impl Default for Options {
@@ -21,7 +22,8 @@ impl Default for Options {
             program_executable_path: "PLEASE, SET!".to_string(),
             is_valgrind_active: true,
             use_stderr_tests: false,
-            language: "EN_en".to_string()
+            language: "EN_en".to_string(),
+            compiled_test_version: false,
         }
     }
 }
@@ -45,6 +47,11 @@ impl Options {
     /// Returns wheater to use stderr tests or not (true - use)
     pub fn get_stderr_option(&self) -> bool {
         self.use_stderr_tests
+    }
+
+    /// Returns wheater program is in 'compiled tests' mode
+    pub fn get_program_mode(&self) -> bool {
+        self.compiled_test_version
     }
 
     /// Function checkes wheter path points to a directory, if so, it sets
@@ -76,6 +83,11 @@ impl Options {
         self.is_valgrind_active = option;
     }
 
+    /// Sets wheter is program should be used in compilation mode
+    pub fn set_compilation_mode(&mut self, option: bool) {
+        self.compiled_test_version = option;
+    }
+
     /// Sets wheter to use stderr tests in testing process (true - use)
     pub fn set_stderr_usage(&mut self, option: bool) {
         self.use_stderr_tests = option;
@@ -96,7 +108,7 @@ impl Options {
         if path::Path::new("config.json").exists() {
             let content = fs::read_to_string("config.json")
                 .expect("ERROR: Opening folder with settings FAILED.");
-            
+
             let preferences = serde_json::from_str(&content);
             if preferences.is_err() {
                 return Options::default();
